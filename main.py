@@ -178,21 +178,21 @@ def monitor_status_and_transfer_emails():
             time_elapsed = current_time - entry["status_updated_at"]
 
             # CANCEL স্ট্যাটাসের মেইল ২ মিনিট পর ফেরত আনা
-            if entry["gmail_status"] == "CANCEL" and time_elapsed >= 120:
+            if entry["gmail_status"] == "CANCEL" and time_elapsed >= 2:
                 gmail_data.append({
                     "Gmail No": entry["Gmail No"],
                     "gmail": entry["gmail"],
                     "password": entry["password"]
                 })
             # RUNNING স্ট্যাটাসের মেইল ১ মিনিট পর ফেরত আনা
-            elif entry["gmail_status"] == "RUNNING" and time_elapsed >= 60:
+            elif entry["gmail_status"] == "RUNNING" and time_elapsed >= 2:
                 gmail_data.append({
                     "Gmail No": entry["Gmail No"],
                     "gmail": entry["gmail"],
                     "password": entry["password"]
                 })
             # FAILED স্ট্যাটাসের মেইল ৫ মিনিট পর failed.json এ স্থানান্তর করা
-            elif entry["gmail_status"] == "FAILED" and time_elapsed >= 300:
+            elif entry["gmail_status"] == "FAILED" and time_elapsed >= 3:
                 entry["failed_at"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(current_time))
                 failed_data.append(entry)
             # COMPLETED স্ট্যাটাসের মেইল সাথে সাথে completed.json এ স্থানান্তর করা
