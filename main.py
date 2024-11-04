@@ -208,5 +208,83 @@ def monitor_status_and_transfer_emails():
 background_thread = threading.Thread(target=monitor_status_and_transfer_emails, daemon=True)
 background_thread.start()
 
+# /balance এন্ডপয়েন্ট থেকে balance.json এর ডেটা দেখানো এবং নতুন ইউজার যোগ করা
+@app.route('/balance', methods=['GET'])
+def manage_balance():
+    user_id = request.args.get('user_id')
+    tg_username = request.args.get('tg_user')
+    user_name = request.args.get('user_name')
+
+    if not user_id or not tg_username or not user_name:
+        # প্যারামিটার না থাকলে balance.json এর ডেটা দেখানো
+        data = load_data('balance.json')
+        return jsonify(data)
+
+    # চেক করা ইউজার আছে কিনা
+    balance_data = load_data('balance.json')
+    existing_user = next((item for item in balance_data if item["user_id"] == user_id), None)
+    if existing_user:
+        return jsonify({"error": "User already exists"}), 400
+
+    # নতুন ইউজার যোগ করা
+    new_user = {
+        "user_name": user_name,
+        "user_id": user_id,
+        "tg_user": tg_username,
+        "available_balance": 0,
+        "pending_withdraw": 0,
+        "already_withdraw": 0
+    }
+    balance_data.append(new_user)
+    save_data('balance.json', balance_data)
+
+    return jsonify({"message": "User added successfully", "user": new_user}), 200
+
+# /balance_update এন্ডপয়েন্ট থেকে ইউজারের ব্যালেন্স আপডেট করা
+@app.route('/balance_update', methods=['GET'])
+def update_balance():
+    user_id = request.args.get('user_id')
+    update_field = request.args.get('for')
+    value = request.args.get('value')
+
+    if not user_id or not update_field or value is None:
+        return jsonify({"error": "Please provide user_id, for, and value parameters"}), 400
+
+    try:
+        value = float(value)
+    except ValueError:
+        return jsonify({"error": "Value must be a number"}), 400
+
+    if value < 0:
+        return jsonify({"error": "Value must be non-negative"}), 400
+
+    balance_data = load_data('balance.json')
+    user = next((item for item in balance_data if item["user_id"] == user_id), None)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if update_field == "available_balance":
+        user["available_balance"] += value
+        message = "Available balance updated successfully"
+    elif update_field == "pending_withdraw":
+        if user["available_balance"] >= value:
+            user["available_balance"] -= value
+            user["pending_withdraw"] += value
+            message = "Pending withdraw updated successfully"
+        else:
+            return jsonify({"error": "Insufficient available balance"}), 400
+    elif update_field == "already_withdraw":
+        if user["pending_withdraw"] >= value:
+            user["pending_withdraw"] -= value
+            user["already_withdraw"] += value
+            message = "Already withdraw updated successfully"
+        else:
+            return jsonify({"error": "Insufficient pending withdraw balance"}), 400
+    else:
+        return jsonify({"error": "Invalid field to update. Choose from available_balance, pending_withdraw, already_withdraw"}), 400
+
+    save_data('balance.json', balance_data)
+    return jsonify({"message": message, "user": user}), 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=81)
