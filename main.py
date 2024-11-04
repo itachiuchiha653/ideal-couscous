@@ -6,6 +6,7 @@ import uuid
 import os
 import random
 import string
+import requests  # নিজে নিজেকে রিকোয়েস্ট পাঠানোর জন্য
 
 app = Flask(__name__)
 
@@ -13,7 +14,11 @@ app = Flask(__name__)
 def load_data(filename):
     if not os.path.exists(filename):
         with open(filename, 'w') as file:
-            json.dump([], file)
+            if filename == 'price.json':
+                # প্রাথমিকভাবে price.json ফাইলে সংখ্যা 3 রাখা
+                json.dump(3, file)
+            else:
+                json.dump([], file)
     with open(filename, 'r') as file:
         return json.load(file)
 
@@ -173,21 +178,21 @@ def monitor_status_and_transfer_emails():
             time_elapsed = current_time - entry["status_updated_at"]
 
             # CANCEL স্ট্যাটাসের মেইল ২ মিনিট পর ফেরত আনা
-            if entry["gmail_status"] == "CANCEL" and time_elapsed >= 3:
+            if entry["gmail_status"] == "CANCEL" and time_elapsed >= 120:
                 gmail_data.append({
                     "Gmail No": entry["Gmail No"],
                     "gmail": entry["gmail"],
                     "password": entry["password"]
                 })
             # RUNNING স্ট্যাটাসের মেইল ১ মিনিট পর ফেরত আনা
-            elif entry["gmail_status"] == "RUNNING" and time_elapsed >= 3:
+            elif entry["gmail_status"] == "RUNNING" and time_elapsed >= 60:
                 gmail_data.append({
                     "Gmail No": entry["Gmail No"],
                     "gmail": entry["gmail"],
                     "password": entry["password"]
                 })
             # FAILED স্ট্যাটাসের মেইল ৫ মিনিট পর failed.json এ স্থানান্তর করা
-            elif entry["gmail_status"] == "FAILED" and time_elapsed >= 5:
+            elif entry["gmail_status"] == "FAILED" and time_elapsed >= 300:
                 entry["failed_at"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(current_time))
                 failed_data.append(entry)
             # COMPLETED স্ট্যাটাসের মেইল সাথে সাথে completed.json এ স্থানান্তর করা
@@ -204,9 +209,48 @@ def monitor_status_and_transfer_emails():
 
         time.sleep(60)  # প্রতি এক মিনিটে চেক করা
 
+# /price রুট থেকে প্রাইস দেখানো এবং আপডেট করা
+@app.route('/price', methods=['GET'])
+def manage_price():
+    add_price = request.args.get('add')
+    data = load_data('price.json')
+
+    if add_price:
+        try:
+            # যদি add_price একটি সংখ্যা হয়, সেটি সেভ করা হবে
+            price = float(add_price)
+            # নতুন প্রাইস price.json এ সেভ করা
+            save_data('price.json', price)
+            return jsonify({"message": "Price updated successfully", "price": price}), 200
+        except ValueError:
+            return jsonify({"error": "Invalid price value"}), 400
+    else:
+        # যদি 'add' প্যারামিটার না দেওয়া হয়, price.json এর ডেটা দেখানো হবে
+        return jsonify({"price": data})
+
+# /alive রুট তৈরি করা
+@app.route('/alive', methods=['GET'])
+def alive():
+    return jsonify({"status": "I'm alive"}), 200
+
+# প্রতি ৫ মিনিট অন্তর নিজেকে /alive রিকোয়েস্ট পাঠানোর ব্যাকগ্রাউন্ড ফাংশন
+def keep_alive():
+    while True:
+        try:
+            # আপনার সার্ভারের হোস্ট এবং পোর্ট অনুযায়ী URL পরিবর্তন করুন
+            requests.get('https://nekotoolsarver.onrender.com/alive')
+            print("Sent /alive request to keep the app alive.")
+        except Exception as e:
+            print(f"Error sending /alive request: {e}")
+        time.sleep(300)  # প্রতি ৫ মিনিটে (300 সেকেন্ড) চেক করা
+
 # ব্যাকগ্রাউন্ডে চেকিং ফাংশন চালানো
 background_thread = threading.Thread(target=monitor_status_and_transfer_emails, daemon=True)
 background_thread.start()
+
+# ব্যাকগ্রাউন্ডে keep_alive ফাংশন চালানো
+keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+keep_alive_thread.start()
 
 # /balance এন্ডপয়েন্ট থেকে balance.json এর ডেটা দেখানো এবং নতুন ইউজার যোগ করা
 @app.route('/balance', methods=['GET'])
@@ -287,4 +331,7 @@ def update_balance():
     return jsonify({"message": message, "user": user}), 200
 
 if __name__ == '__main__':
+    # প্রাথমিকভাবে price.json এ সংখ্যা 3 সেট করা
+    if not os.path.exists('price.json'):
+        save_data('price.json', 3)
     app.run(host='0.0.0.0', port=81)
